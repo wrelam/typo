@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <math.h>
 
 char number[3];
 int eflg;
@@ -31,14 +36,22 @@ int ptr[3];
 char *name[3];
 char bsp[2*768];
 
-main(argc,argv) int argc; char *argv[]; {
+void unl(int unused);
+int err(char c[]);
+int get(int ifile);
+int put(int ofile,char s[],int optr);
+int flsh(int ofile,int i);
+int wdval(int wfile);
+int nwdval(int wfile);
+int conf(int n,int width,char cbuf[]);
+int rand(void);
+
+int main(int argc,char *argv[]) {
 	char let,lt;
-	auto arg,t,sw,i,j,salt,er,c;
-	register k,l,m;
+	auto int arg,t,sw,i,j,salt,er,c;
+	register int k,l,m;
 	double junk;
-	int unl();
 	int ii;
-	double log(), exp(), pow();
 
 	inctab[0] = 1;
 	logtab[0] = -10;
@@ -76,8 +89,8 @@ main(argc,argv) int argc; char *argv[]; {
 			if(er != 21200)err("read salt");
 		close(salt);
 		}
-	if((signal(2,1) & 1) != 1)
-		signal(2,unl);
+    if (signal(2,SIG_IGN) != SIG_IGN)
+        signal(2,unl);
 	name[0] = strdup("/tmp/ttmpa1");
 	name[1] = strdup("/tmp/ttmpa2");
 	name[2] = strdup("/tmp/ttmpa3");
@@ -118,6 +131,7 @@ main(argc,argv) int argc; char *argv[]; {
 	close(file[0]);
 	sw = fork();
 	if(sw == 0){execl("/usr/bin/usort","usort","-o",name[2],name[0],NULL);
+        err("usort"); }
 	if(sw == -1)err("fork");
 	er = wait(0);
 		if(er != sw)err("probs");
@@ -176,10 +190,10 @@ done:
 		while(m <= j){
 			tot = 0;
 			c = wd[k++]*27 + wd[l++];
-			tot =+ (logtab[tab.tab2[c]]+logtab[tab.tab2[wd[k]*27+wd[l]]]);
+			tot += (logtab[tab.tab2[c]]+logtab[tab.tab2[wd[k]*27+wd[l]]]);
 			tot >>= 1;
 			c = c*27 + wd[m++];
-			tot =- logtab[tab.tab3[c] & 0377];
+			tot -= logtab[tab.tab3[c] & 0377];
 			if(tot > wtot) wtot = tot;
 			}
 		if(wtot < 0) wtot = 0;
@@ -218,30 +232,31 @@ done:
 		if(sw == -1)err("fork");
 	er = wait(0);
 		if(er != sw)err("prob");
-	unl();
+	unl(0);
 }
 
-unl() {
-	register j;
+void unl(int unused) {
+	register int j;
 	j = 2;
 	while(j--)unlink(name[j]);
 	exit(2);
 }
 
 
-err(c) char c[];{
-	register j;
+int err(char c[]) {
+	register int j;
 	printf("cannot %s\n",c);
 	perror(c);
-	unl();
+	unl(0);
 	exit(2);
+    return(0);
 }
 
-get(ifile) int ifile;{
+int get(int ifile) {
 	static char *ibuf[10];
 	if(--ptr[ifile]){
 		return(*ibuf[ifile]++ & 0377);}
-	if(ptr[ifile] = read(file[ifile],buf[ifile],512)){
+	if((ptr[ifile] = read(file[ifile],buf[ifile],512))){
 		if(ptr[ifile] < 0)goto prob;
 		ibuf[ifile] = buf[ifile];
 		return(*ibuf[ifile]++ & 0377);
@@ -255,16 +270,16 @@ prob:
 	return(-1);
 }
 
-put(ofile,s,optr) char s[]; {
-	register i;
+int put(int ofile,char s[],int optr) {
+	register int i;
 
 	while(optr-- >= 0)
 		 buf[ofile][(ptr[ofile] < 512)?ptr[ofile]++:flsh(ofile,1)] = *s++;
-	return;
+	return 0;
 }
 
-flsh(ofile,i){
-	register error;
+int flsh(int ofile,int i) {
+	register int error;
 	error = write(file[ofile],buf[ofile],ptr[ofile]);
 	if(error < 0)goto prob;
 
@@ -273,12 +288,13 @@ flsh(ofile,i){
 prob:
 	printf("write error on t.%d\n",file[ofile]);
 	perror("write");
-	unl();
+	unl(0);
+    return(0);
 }
 
-wdval(wfile) int wfile; {
-	static let,wflg;
-	register j;
+int wdval(int wfile) {
+	static int let,wflg;
+	register int j;
 beg:
 	j = -1;
 	if(wflg == 1){wflg = 0;
@@ -325,8 +341,8 @@ ret:
 	return(j);
 }
 
-nwdval(wfile) int wfile;{
-	register j;
+int nwdval(int wfile) {
+	register int j;
 	register char c;
 	j = -1;
 	do{
@@ -337,8 +353,9 @@ nwdval(wfile) int wfile;{
 	wd[j] = '\0';
 	return(j);
 }
-conf(n,width,cbuf) char cbuf[]; {
-	register i,a;
+
+int conf(int n,int width,char cbuf[]) {
+	register int i,a;
 
 	i = width;
 	while(i--)cbuf[i] = ' ';
@@ -347,8 +364,9 @@ conf(n,width,cbuf) char cbuf[]; {
 
 	return(++width);
 }
-rand(){
-	static gorp;
+
+int rand(void) {
+	static int gorp;
 	gorp = (gorp + 625) & 077777;
 	return(gorp);
 }
